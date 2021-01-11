@@ -104,6 +104,7 @@ growth.boot <- left_join(start.tl.boot, final.tl.boot) %>%
 
 growth.boot.95perc <- growth.boot %>% group_by(group) %>% 
   summarize(mean.growth = mean(growth.mm),
+            growth.se = sd(growth.mm),
             growth.ci.upper = quantile(growth.mm, probs = 0.975),
             growth.ci.lower = quantile(growth.mm, probs = 0.025)) %>% 
   mutate(population = factor(gsub("\\.", "", substr(group, 1, 8)), ordered = TRUE, levels = c("Superior", "Ontario")),
@@ -113,6 +114,8 @@ growth.boot.95perc <- growth.boot %>% group_by(group) %>%
 
 ggplot(growth.boot.95perc, aes(x = temperature, y = mean.growth, group = population, fill = population)) +
   geom_bar(stat = "identity", position = 'dodge', color = "black") +
+  #geom_errorbar(aes(ymin = mean.growth - growth.se, ymax = mean.growth + growth.se), position = position_dodge(0.9),
+  #              size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   scale_fill_grey(start = 0.3, end = 0.8, labels = c("Superior   ", "Ontario")) +
@@ -131,6 +134,8 @@ ggplot(growth.boot.95perc, aes(x = temperature, y = mean.growth, group = populat
 
 ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperature, fill = temperature)) +
   geom_bar(stat = "identity", position = 'dodge', color = "black") +
+  #geom_errorbar(aes(ymin = mean.growth - growth.se, ymax = mean.growth + growth.se), position = position_dodge(0.9),
+  #              size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   scale_fill_manual(values = c("#91bfdb", "#ffffbf", "#fc8d59"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
@@ -146,6 +151,6 @@ ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperat
         legend.text = element_text(size = 15),
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
-  
+
 
 
