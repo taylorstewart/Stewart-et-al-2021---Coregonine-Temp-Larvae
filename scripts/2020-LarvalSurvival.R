@@ -9,18 +9,44 @@ library(tidyverse)
 library(readxl)
 library(magrittr)
 library(ggplot2)
-
+library(car)
+library(lme4)
 
 #### LOAD LARVAL DATA ----------------------------------------------------------------------------
 
-larval.data <- read_excel("data/Artedi-Temperature-Larval-Survival.xlsx", sheet = "LarvalSurvival") %>% 
-  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2.0, 4.5, 7.0, 9.0))) 
+larval.data <- read_excel("data/2020-Artedi-Temperature-Larval-Survival.xlsx", sheet = "LarvalSurvival") %>% 
+  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2.0, 4.5, 7.0, 9.0)),
+         survival.logit = car::logit(larval.survival, percents = TRUE))
 
 larval.data.summary <- larval.data %>% 
   group_by(population, treatment) %>% 
   summarize(mean.survival = mean(larval.survival),
             sd.survival = sd(larval.survival),
             se.survival = sd.survival/sqrt(n()))
+
+
+## Fit model
+lm <- lm(survival.logit ~ treatment, data = filter(larval.data, population == "ontario"))
+
+## CHECK ASSUMPTIONS ============================================
+
+##  Normality
+shapiro.test(larval.data$survival.logit) 
+## p = 0.2554; accept normality
+
+## Homogeneity of Variance by source
+bartlett.test(survival.logit ~ treatment, data = larval.data)
+## p = 0.07; accept equal variance
+
+
+anova(lm)
+
+## Calculate estimated marginal means - be very patient!
+larval.glm.emm <- emmeans(lm, ~ treatment)
+
+## Pairwise
+emm.pairs <- pairs(larval.glm.emm, simple = "treatment", adjust = "tukey", type = "response") 
+emm.cld <- multcomp::cld(emm.pairs, )
 
 
 ggplot(larval.data.summary, aes(x = treatment, y = mean.survival, fill = population)) +
