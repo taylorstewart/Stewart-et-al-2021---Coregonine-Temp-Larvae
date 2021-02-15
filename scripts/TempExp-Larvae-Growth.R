@@ -17,6 +17,8 @@ library(ggplot2)
 library(parallel)
 
 
+#### CREATE DATAFRAME WITH ATC DATES -------------------------------------------------------------
+
 growth.dates <- data.frame(population = factor(rep(c("Superior", "Ontario"), each = 3), ordered = TRUE, levels = c("Superior", "Ontario")),
                            treatment = factor(rep(c(2, 4.5, 7), 2), ordered = TRUE),
                            end.date = as.POSIXct(c("2020-07-09", "2020-05-27", "2020-04-15", 
@@ -30,7 +32,7 @@ larval.lah.lo <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Co
 
 # Combine each population, temperature, and species
 larval.lah <- bind_rows(larval.lah.ls, larval.lah.lo) %>% 
-  filter(temperature != 8.9, !is.na(length_mm), length_mm != 0) %>% 
+  filter(temperature != 8.9, !is.na(length_mm), length_mm != 0, include.tl == "y") %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("superior", "ontario"), labels = c("Superior", "Ontario")),
          treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9), labels = c(2.0, 4.5, 7.0)),
          group = interaction(population, treatment)) %>% 
@@ -54,8 +56,8 @@ larval.growth <- bind_rows(larval.growth.2.0, larval.growth.4.5, larval.growth.7
 
 rm(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0)
 
-
-embryo.hatch <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Coregonine-Latitude-Embryo/data/Coregonine-Temperature-Experiment-NA-Hatch.xlsx", sheet = "2020HatchingData") %>% 
+## Find length of rearing
+embryo.hatch.dates <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Coregonine-Latitude-Embryo/data/Coregonine-Temperature-Experiment-NA-Hatch.xlsx", sheet = "2020HatchingData") %>% 
   filter(is.na(notes) | notes != "empty well", !is.na(hatch_date), temperature != 8.9) %>% 
   mutate(population = factor(ifelse(population == "superior", "Superior", "Ontario"), ordered = TRUE, levels = c("Superior", "Ontario")),
          treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9), labels = c(2.0, 4.5, 7.0))) %>% 
@@ -68,7 +70,7 @@ embryo.hatch <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Cor
   dplyr::select(population, treatment, group, growth.days)
 
 
-#### LOAD LARVAL DATA ----------------------------------------------------------------------------
+#### BOOTSTRAP LENGTH DATA -----------------------------------------------------------------------
 
 start.tl.boot <- do.call(rbind, lapply(unique(larval.lah$group), function(grp) {
   ## Filter to only a single temperature treatment
@@ -76,7 +78,7 @@ start.tl.boot <- do.call(rbind, lapply(unique(larval.lah$group), function(grp) {
     select(group, length.mm)
   
   ## Create a bootstrapped data set from each temperature and group
-  bootstrap.data <- do.call(rbind, lapply(1:10000, function(length) {
+  bootstrap.data <- do.call(rbind, lapply(1:5000, function(length) {
     tl.boot <- sample(data.group$length.mm, replace = T, size = nrow(data.group))
     data.tl.boot <- data.frame(group = grp, rep = length, start.length.mm = mean(tl.boot))
   }))
@@ -89,18 +91,19 @@ final.tl.boot <- do.call(rbind, lapply(unique(larval.growth$group), function(grp
     select(group, length.mm)
   
   ## Create a bootstrapped data set from each temperature and group
-  bootstrap.data <- do.call(rbind, lapply(1:10000, function(length) {
+  bootstrap.data <- do.call(rbind, lapply(1:5000, function(length) {
       tl.boot <- sample(data.group$length.mm, replace = T, size = nrow(data.group))
       data.tl.boot <- data.frame(group = grp, rep = length, final.length.mm = mean(tl.boot))
   }))
 }))
 
 
+#### SUMMARIZE BOOTSTRAPPED DATA -----------------------------------------------------------------
+
 growth.boot <- left_join(start.tl.boot, final.tl.boot) %>% 
-  left_join(embryo.hatch) %>% 
+  left_join(embryo.hatch.dates) %>% 
   mutate(tl.diff = final.length.mm - start.length.mm,
          growth.mm = tl.diff/as.numeric(growth.days))
-
 
 growth.boot.95perc <- growth.boot %>% group_by(group) %>% 
   summarize(mean.growth = mean(growth.mm),
@@ -111,6 +114,7 @@ growth.boot.95perc <- growth.boot %>% group_by(group) %>%
          temperature = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 12)), ordered = TRUE, levels = c(2, 4.5, 7), labels = c("2.0", "4.5", "7.0")))
 
 
+#### VISUALIZATIONS ------------------------------------------------------------------------------
 
 ggplot(growth.boot.95perc, aes(x = temperature, y = mean.growth, group = population, fill = population)) +
   geom_bar(stat = "identity", position = 'dodge', color = "black") +
@@ -138,7 +142,7 @@ ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperat
   #              size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
-  scale_fill_manual(values = c("#91bfdb", "#ffffbf", "#fc8d59"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
+  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
   scale_y_continuous(limits = c(0, 0.07), breaks = seq(0, 0.07, 0.01), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
   labs(y = expression("Absolute Growth Rate (mm day"^-1*")"), x = "Population") +
@@ -151,6 +155,4 @@ ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperat
         legend.text = element_text(size = 15),
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
-
-
 
