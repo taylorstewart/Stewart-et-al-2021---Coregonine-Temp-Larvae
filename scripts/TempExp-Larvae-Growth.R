@@ -19,81 +19,92 @@ library(parallel)
 
 #### CREATE DATAFRAME WITH ATC DATES -------------------------------------------------------------
 
-growth.dates <- data.frame(population = factor(rep(c("Superior", "Ontario"), each = 3), ordered = TRUE, levels = c("Superior", "Ontario")),
-                           treatment = factor(rep(c(2, 4.5, 7), 2), ordered = TRUE),
-                           end.date = as.POSIXct(c("2020-07-09", "2020-05-27", "2020-04-15", 
-                                        "2020-07-21", "2020-05-27", "2020-04-15"), format = "%Y-%m-%d"))
+growth.dates <- data.frame(population = factor(rep(c("Superior", "Ontario"), each = 4), ordered = TRUE, levels = c("Superior", "Ontario")),
+                           treatment = factor(rep(c(2, 4.5, 7, 9), 2), ordered = TRUE),
+                           end.date = as.POSIXct(c("2020-07-09", "2020-05-27", "2020-04-15", "2020-03-22",
+                                                   "2020-07-21", "2020-05-27", "2020-04-15", "2020-03-22"), format = "%Y-%m-%d"))
 
 
 #### LOAD LARVAL LENGTH-AT-HATCH DATA ------------------------------------------------------------
 
-larval.lah.ls <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Coregonine-Latitude-Embryo/data/Coregonine-Temperature-Experiment-LarvalMeasurements.xlsx", sheet = "LS-Larvae")
-larval.lah.lo <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Coregonine-Latitude-Embryo/data/Coregonine-Temperature-Experiment-LarvalMeasurements.xlsx", sheet = "LO-Larvae")
+larval.lah.ls <- read_excel("data/Artedi-Temperature-HatchingMeasurements.xlsx", sheet = "LS-Larvae")
+larval.lah.lo <- read_excel("data/Artedi-Temperature-HatchingMeasurements.xlsx", sheet = "LO-Larvae")
 
 # Combine each population, temperature, and species
 larval.lah <- bind_rows(larval.lah.ls, larval.lah.lo) %>% 
-  filter(temperature != 8.9, !is.na(length_mm), length_mm != 0, include.tl == "y") %>% 
+  filter(!is.na(length_mm), length_mm != 0, include.tl == "y") %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("superior", "ontario"), labels = c("Superior", "Ontario")),
-         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9), labels = c(2.0, 4.5, 7.0)),
+         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9), labels = c(2.0, 4.5, 7.0, 9.0)),
          group = interaction(population, treatment)) %>% 
-  select(group, population, treatment, length.mm = length_mm)
+  select(group, population, treatment, rearing.tank, length.mm = length_mm)
 
 rm(larval.lah.ls, larval.lah.lo)
 
 
 #### LOAD LARVAL 90 DAYS LENGTH DATA -------------------------------------------------------------
 
-larval.growth.2.0 <- read_excel("data/2020-Artedi-Temperature-ATC.xlsx", sheet = "2.0-Data")
-larval.growth.4.5 <- read_excel("data/2020-Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
-larval.growth.7.0 <- read_excel("data/2020-Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
+larval.growth.2.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "2.0-Data")
+larval.growth.4.5 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
+larval.growth.7.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
+larval.growth.9.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "9.0-Data")
 
 ## Combine data frames
-larval.growth <- bind_rows(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0) %>% 
+larval.growth <- bind_rows(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0, larval.growth.9.0) %>% 
   filter(!is.na(length.mm), length.mm != 0) %>% 
-  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2, 4.5, 7)),
+  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2, 4.5, 7, 9)),
          population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
          group = interaction(population, treatment))
 
-rm(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0)
+rm(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0, larval.growth.9.0)
 
 ## Find length of rearing
-embryo.hatch.dates <- read_excel("/Users/Taylor/SynologyDrive/Cisco-Climate-Change/Coregonine-Latitude-Embryo/data/Coregonine-Temperature-Experiment-NA-Hatch.xlsx", sheet = "2020HatchingData") %>% 
-  filter(is.na(notes) | notes != "empty well", !is.na(hatch_date), temperature != 8.9) %>% 
+embryo.hatch.dates <- read_excel("data/Artedi-Temperature-HatchDates.xlsx", sheet = "2020HatchingData") %>% 
+  filter(is.na(notes) | notes != "empty well", !is.na(hatch_date)) %>% 
   mutate(population = factor(ifelse(population == "superior", "Superior", "Ontario"), ordered = TRUE, levels = c("Superior", "Ontario")),
-         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9), labels = c(2.0, 4.5, 7.0))) %>% 
-  dplyr::select(population, treatment, hatch_date) %>% 
-  group_by(population, treatment) %>% 
+         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9), labels = c(2.0, 4.5, 7.0, 9.0))) %>% 
+  dplyr::select(population, treatment, rearing.tank, hatch_date) %>% 
+  group_by(population, treatment, rearing.tank) %>% 
   summarize(mean.hatch.date = strptime(mean(hatch_date), format = "%Y-%m-%d")) %>% 
   left_join(growth.dates) %>% 
   mutate(growth.days = round(end.date - mean.hatch.date, 0),
          group = interaction(population, treatment)) %>% 
-  dplyr::select(population, treatment, group, growth.days)
+  dplyr::select(population, treatment, rearing.tank, group, growth.days)
 
 
 #### BOOTSTRAP LENGTH DATA -----------------------------------------------------------------------
 
 start.tl.boot <- do.call(rbind, lapply(unique(larval.lah$group), function(grp) {
   ## Filter to only a single temperature treatment
-  data.group <- larval.lah %>% filter(group == grp) %>% 
-    select(group, length.mm)
+  data.group <- larval.lah %>% filter(group == grp)
   
-  ## Create a bootstrapped data set from each temperature and group
-  bootstrap.data <- do.call(rbind, lapply(1:5000, function(length) {
-    tl.boot <- sample(data.group$length.mm, replace = T, size = nrow(data.group))
-    data.tl.boot <- data.frame(group = grp, rep = length, start.length.mm = mean(tl.boot))
+  do.call(rbind, lapply(unique(data.group$rearing.tank), function(rt) {
+    ## Filter to only a single temperature treatment
+    data.group.rt <- data.group %>% filter(rearing.tank == rt) %>% 
+      select(group, rearing.tank, length.mm)
+    
+    ## Create a bootstrapped data set from each temperature and group
+    bootstrap.data <- do.call(rbind, lapply(1:5000, function(length) {
+      tl.boot <- sample(data.group.rt$length.mm, replace = T, size = nrow(data.group.rt))
+      data.tl.boot <- data.frame(group = grp, rearing.tank = rt, rep = length, start.length.mm = mean(tl.boot))
+    }))
   }))
 }))
 
 
 final.tl.boot <- do.call(rbind, lapply(unique(larval.growth$group), function(grp) {
   ## Filter to only a single temperature treatment
-  data.group <- larval.growth %>% filter(group == grp) %>% 
-    select(group, length.mm)
+  data.group <- larval.growth %>% filter(group == grp)
   
-  ## Create a bootstrapped data set from each temperature and group
-  bootstrap.data <- do.call(rbind, lapply(1:5000, function(length) {
-      tl.boot <- sample(data.group$length.mm, replace = T, size = nrow(data.group))
-      data.tl.boot <- data.frame(group = grp, rep = length, final.length.mm = mean(tl.boot))
+  do.call(rbind, lapply(unique(data.group$rearing.tank), function(rt) {
+    ## Filter to only a single temperature treatment
+    data.group.rt <- data.group %>% filter(rearing.tank == rt) %>% 
+      select(group, rearing.tank, length.mm)
+    
+    ## Create a bootstrapped data set from each temperature and group
+    bootstrap.data <- do.call(rbind, lapply(1:5000, function(length) {
+      tl.boot <- sample(data.group.rt$length.mm, replace = T, size = nrow(data.group.rt))
+      data.tl.boot <- data.frame(group = grp, rearing.tank = rt, rep = length, final.length.mm = mean(tl.boot))
+    }))
   }))
 }))
 
@@ -111,7 +122,7 @@ growth.boot.95perc <- growth.boot %>% group_by(group) %>%
             growth.ci.upper = quantile(growth.mm, probs = 0.975),
             growth.ci.lower = quantile(growth.mm, probs = 0.025)) %>% 
   mutate(population = factor(gsub("\\.", "", substr(group, 1, 8)), ordered = TRUE, levels = c("Superior", "Ontario")),
-         temperature = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 12)), ordered = TRUE, levels = c(2, 4.5, 7), labels = c("2.0", "4.5", "7.0")))
+         temperature = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 12)), ordered = TRUE, levels = c(2, 4.5, 7, 9), labels = c("2.0", "4.5", "7.0", "9.0")))
 
 
 #### VISUALIZATIONS ------------------------------------------------------------------------------
@@ -123,7 +134,7 @@ ggplot(growth.boot.95perc, aes(x = temperature, y = mean.growth, group = populat
   geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   scale_fill_grey(start = 0.3, end = 0.8, labels = c("Superior   ", "Ontario")) +
-  scale_y_continuous(limits = c(0, 0.07), breaks = seq(0, 0.07, 0.01), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 0.105), breaks = seq(0, 0.10, 0.02), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
   labs(y = expression("Absolute Growth Rate (mm day"^-1*")"), x = "Incubation Temperature (°C)") +
   theme_bw() +
@@ -143,7 +154,7 @@ ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperat
   geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
-  scale_y_continuous(limits = c(0, 0.07), breaks = seq(0, 0.07, 0.01), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 0.105), breaks = seq(0, 0.1, 0.02), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
   labs(y = expression("Absolute Growth Rate (mm day"^-1*")"), x = "Population") +
   theme_bw() +
