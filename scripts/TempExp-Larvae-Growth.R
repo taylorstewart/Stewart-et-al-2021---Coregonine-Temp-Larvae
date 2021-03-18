@@ -127,30 +127,8 @@ growth.boot.95perc <- growth.boot %>% group_by(group) %>%
 
 #### VISUALIZATIONS ------------------------------------------------------------------------------
 
-ggplot(growth.boot.95perc, aes(x = temperature, y = mean.growth, group = population, fill = population)) +
-  geom_bar(stat = "identity", position = 'dodge', color = "black") +
-  #geom_errorbar(aes(ymin = mean.growth - growth.se, ymax = mean.growth + growth.se), position = position_dodge(0.9),
-  #              size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
-  geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
-                size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
-  scale_fill_grey(start = 0.3, end = 0.8, labels = c("Superior   ", "Ontario")) +
-  scale_y_continuous(limits = c(0, 0.105), breaks = seq(0, 0.10, 0.02), expand = c(0, 0)) +
-  scale_x_discrete(expand = c(0, 0.5)) +
-  labs(y = expression("Absolute Growth Rate (mm day"^-1*")"), x = "Incubation Temperature (°C)") +
-  theme_bw() +
-  theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
-        axis.title.y = element_text(color = "Black", size = 18, margin = margin(0, 10, 0, 0)),
-        axis.text.x = element_text(size = 13),
-        axis.text.y = element_text(size = 13),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 15),
-        legend.key.width = unit(1.25, 'cm'),
-        legend.position = "top")
-
 ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperature, fill = temperature)) +
   geom_bar(stat = "identity", position = 'dodge', color = "black") +
-  #geom_errorbar(aes(ymin = mean.growth - growth.se, ymax = mean.growth + growth.se), position = position_dodge(0.9),
-  #              size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
@@ -166,4 +144,6 @@ ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperat
         legend.text = element_text(size = 15),
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
+
+ggsave("figures/Growth.tiff", width = 9, height = 6, dpi = 600)
 

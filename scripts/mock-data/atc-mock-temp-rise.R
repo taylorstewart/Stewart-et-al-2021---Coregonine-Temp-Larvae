@@ -12,6 +12,7 @@ library(readxl)
 library(magrittr)
 library(ggplot2)
 library(lubridate)
+library(scales)
 
 
 ## ===========================================================
@@ -21,7 +22,7 @@ atc.temp <- read_excel("scripts/mock-data/atc-mock-temp-rise.xlsx", sheet = "She
   mutate(datetime = as.POSIXct(datetime, tz = "America/New_York")) %>% 
   filter(datetime > ymd_hms("2020-01-02 05:59:00"))
   
-ATC.2.0 <- read_excel("data/ATC/2020-Artedi-ATC.xlsx", sheet = "2.0-temp") %>% 
+ATC.2.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "2.0-Temp") %>% 
   filter(Tank == "ATC 01", DateTime > ymd_hms("1899-12-31 06:05:00"), DateTime <= ymd_hms("1899-12-31 23:35:00")) %>% 
   mutate(DateTime = seq.POSIXt(as.POSIXct("2020-01-02 01:06:00"), as.POSIXct("2020-01-02 18:35:00"), by = "1 min", tz = "America/New_York"))
 
@@ -40,6 +41,6 @@ ggplot(atc.temp, aes(x = datetime, y = temp)) +
         axis.ticks.length = unit(1.5, "mm"),
         plot.margin = unit(c(5, 8, 5, 5), 'mm'))
 
-ggsave("figures/atc/atc-temp.png", width = 12, height = 7, dpi = 300)
+ggsave("figures/ATC-Mock-Temp.tiff", width = 12, height = 7, dpi = 600)
 
 

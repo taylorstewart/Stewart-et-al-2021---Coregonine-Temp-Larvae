@@ -12,6 +12,7 @@ library(ggplot2)
 library(car)
 library(lme4)
 
+
 #### LOAD LARVAL DATA ----------------------------------------------------------------------------
 
 larval.data <- read_excel("data/Artedi-Temperature-Larval-Survival.xlsx", sheet = "LarvalSurvival") %>% 
@@ -27,22 +28,21 @@ larval.data.summary <- larval.data %>%
 
 
 ggplot(larval.data.summary, aes(x = population, y = mean.survival, fill = treatment)) +
-  geom_bar(stat = "identity", size = 0.5, width = 0.925, position = position_dodge(0.925), color = "black") +
-  geom_errorbar(aes(ymin = mean.survival-se.survival, ymax = mean.survival+se.survival),
-                width = 0.3, position = position_dodge(width = 0.925)) +
-  scale_y_continuous(limits = c(0, 50), expand = c(0, 0)) +
-  scale_x_discrete(expand = c(0, 0.)) +
+  geom_bar(stat = "identity", position = 'dodge', color = "black") +
+  geom_errorbar(aes(ymin = mean.survival-se.survival, ymax = mean.survival+se.survival), position = position_dodge(0.9),
+                size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
+  scale_y_continuous(limits = c(0, 52), expand = c(0, 0)) +
+  scale_x_discrete(expand = c(0, 0.5)) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
   labs(x = "Population", y = "Larval Survival (%)", color = "Populations") +
-  theme_classic() +
-  theme(axis.title.x = element_text(color = "Black", size = 20, margin = margin(10, 0, 0, 0)),
-        axis.title.y = element_text(color = "Black", size = 20, margin = margin(0, 10, 0, 0)),
-        axis.text.x = element_text(size = 15),
-        axis.text.y = element_text(size = 15),
+  theme_bw() +
+  theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
+        axis.title.y = element_text(color = "Black", size = 18, margin = margin(0, 10, 0, 0)),
+        axis.text.x = element_text(size = 13),
+        axis.text.y = element_text(size = 13),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
-        legend.key.size = unit(1.0, 'cm'),
-        legend.position = "top",
-        plot.margin = unit(c(5, 5, 5, 5), 'mm'))
+        legend.key.width = unit(1.25, 'cm'),
+        legend.position = "top")
 
-ggsave("figures/2020-Larval-Survival.png", width = 8, height = 7, dpi = 300)
+ggsave("figures/Survival.tiff", width = 9, height = 6, dpi = 600)

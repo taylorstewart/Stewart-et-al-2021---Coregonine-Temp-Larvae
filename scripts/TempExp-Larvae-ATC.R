@@ -9,21 +9,27 @@ library(dplyr)
 library(readxl)
 library(magrittr)
 library(ggplot2)
+library(lme4)
+library(lmerTest)
+library(afex)
+library(car)
+library(emmeans)
 
 
 #### LOAD DATA -----------------------------------------------------------------------------------
 
-ATC.2.0 <- read_excel("data/2020-Artedi-Temperature-ATC.xlsx", sheet = "2.0-Data")
-ATC.4.5 <- read_excel("data/2020-Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
-ATC.7.0 <- read_excel("data/2020-Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
+ATC.2.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "2.0-Data")
+ATC.4.5 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
+ATC.7.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
 
 
 #### COMBINE TEMPERATURE TREATMENTS --------------------------------------------------------------
 
 ATC <- bind_rows(ATC.2.0, ATC.4.5, ATC.7.0) %>% 
   filter(include != "n") %>% 
-  mutate(population = factor(population),
-         treatment = factor(treatment),
+  mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
+         treatment = paste0(formatC(treatment, digits = 1, format = "f"), "°C"),
+         treatment = factor(treatment, ordered = TRUE, levels = c("2.0°C", "4.5°C", "7.0°C")),
          replicate.tank = substr(tank.id, (nchar(tank.id)+1)-1, nchar(tank.id)),
          replicate.tank = ifelse(replicate.tank == 6, 1, replicate.tank),
          replicate.tank = ifelse(replicate.tank == 7, 2, replicate.tank),
@@ -32,36 +38,64 @@ ATC <- bind_rows(ATC.2.0, ATC.4.5, ATC.7.0) %>%
          replicate.rearing = ifelse(population == "Ontario", paste0("LO-", replicate.rearing), paste0("LS-", replicate.rearing)))
 
 
-#### CALCULATE MEANS AND SE FOR EACH TREATMENT ---------------------------------------------------
+#### CALCULATE SAMPLE SIZE FOR EACH TREATMENT AND POPULATION -------------------------------------
 
-ATC.summary <- ATC %>% group_by(population, replicate.rearing, treatment) %>% 
-  summarize(mean.ct = mean(lethal.temp),
-            sd.ct = sd(lethal.temp),
-            n = n(),
-            se.ct = sd.ct/sqrt(n),
-            max.ct = max(lethal.temp)) %>% 
-  bind_rows(data.frame(population = c("Ontario", "Ontario", "Superior"),
-                       replicate.rearing = c("LO-1", "LO-2", "LS-1"),
-                       treatment = factor(rep(9, 3)),
-                       mean.ct = rep(0, 3),
-                       sd.ct = rep(0, 3),
-                       n = rep(0, 3),
-                       se.ct = rep(0, 3),
-                       max.ct = rep(0, 3)))
+ATC.n <- ATC %>% group_by(population, treatment) %>% 
+  summarize(n = n())
+
+
+#### STATISTICAL ANALYSIS ------------------------------------------------------------------------
+
+## fit full model
+cisco.glm.full <- lmer(lethal.temp ~ treatment + population + treatment:population + 
+                        (1|replicate.tank) + (1|replicate.rearing), data = ATC)
+
+## backward elimination to select best model
+( step(cisco.glm.full))
+  ## Random effects removed - use linear model
+
+## Box Cox transformation
+summary(cisco.lm.bcTrans <- powerTransform(lethal.temp ~ treatment + population + treatment:population, data = ATC))
+cisco.glm.final <- lm(bcPower(lethal.temp, cisco.lm.bcTrans$roundlam) ~ treatment + population + treatment:population, data = ATC)
+
+## check residuals for normality
+qqPlot(cisco.glm.final)
+hist(rstudent(cisco.glm.final))
+
+## check equal variance
+leveneTest(lethal.temp ~ population, data = ATC)
+
+## ANOVA
+anova(cisco.glm.final)
+
+## Create model for back-transforming data
+bctran <- make.tran("boxcox", 6.1709)
+cisco.bc <- with(bctran, 
+                 lm(linkfun(lethal.temp) ~ treatment + population + treatment:population, data = ATC))
+
+## Estimated margin means
+cisco.glm.full.emm <- emmeans(cisco.bc, ~ treatment | population, type = "response")
+cisco.emm.data <- data.frame(cisco.glm.full.emm) %>% 
+  mutate(treatment = factor(treatment, ordered = TRUE, levels = c("2.0°C", "4.5°C", "7.0°C")),
+         population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario"))) %>% 
+  left_join(ATC.n)
+
+## Pairwise
+pairs(cisco.glm.full.emm, simple = list("treatment"), adjust = "fdr") 
 
 
 #### VISUALIZATION -------------------------------------------------------------------------------
 
-ggplot(ATC.summary, aes(x = replicate.rearing, y = mean.ct, color = population, shape = population)) +
-  geom_point(size = 4, position = position_dodge(width = 0.9)) +
-  geom_errorbar(aes(ymin = mean.ct-se.ct, ymax = mean.ct+se.ct),
+ggplot(cisco.emm.data, aes(x = population, y = response, color = population, shape = population)) +
+  geom_point(size = 3, position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = response-SE, ymax = response+SE),
                 width = 0.3, size = 0.9, position = position_dodge(0.9)) +
   geom_text(aes(label = paste0("n=", n), y = 23.05), position = position_dodge(0.9), size = 4, color = "black", vjust = 'bottom') +
   scale_y_continuous(limits = c(23, 26.5), expand = c(0, 0)) +
-  scale_color_manual(labels = c("L. Ontario    ", "L. Superior"), 
+  scale_color_manual(labels = c("Superior    ", "Ontario"), 
                     values = c("#fc8d59", "#91bfdb")) +
-  scale_shape_manual(values = c(16, 15), labels = c("L. Ontario    ", "L. Superior")) +
-  labs(y = expression("Mean "~CT[max]*" (°C ± SE)"), x = 'Replicate Tank') +
+  scale_shape_manual(values = c(16, 15), labels = c("Superior    ", "Ontario")) +
+  labs(y = expression("Mean "~CT[max]*" (°C ± SE)"), x = 'Population') +
   theme_bw() +
   theme(axis.title.x = element_text(color = "Black", size = 22, margin = margin(10, 0, 0, 0)),
         axis.title.y = element_text(color = "Black", size = 22, margin = margin(0, 10, 0, 0)),
@@ -71,11 +105,12 @@ ggplot(ATC.summary, aes(x = replicate.rearing, y = mean.ct, color = population, 
         legend.title = element_blank(),
         legend.text = element_text(size = 20),
         legend.key.size = unit(1.0, 'cm'),
-        legend.position = "top",
+        legend.position = "none",
         strip.text = element_text(size = 15),
+        strip.background = element_rect(fill = "transparent"),
         plot.margin = unit(c(5, 5, 5, 5), 'mm')) +
   facet_wrap(~treatment, nrow = 1)
 
-ggsave("figures/atc/2020-ATC-CT-RearingRep.png", width = 18, height = 10, dpi = 300)
+ggsave("figures/ATC-CT.tiff", width = 8, height = 6, dpi = 600)
 
 
