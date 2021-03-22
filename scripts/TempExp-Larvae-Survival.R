@@ -23,6 +23,7 @@ larval.data <- read_excel("data/Artedi-Temperature-Larval-Survival.xlsx", sheet 
 larval.data.summary <- larval.data %>% 
   group_by(population, treatment) %>% 
   summarize(mean.survival = mean(larval.survival),
+            n = n(),
             sd.survival = sd(larval.survival),
             se.survival = sd.survival/sqrt(n()))
 
@@ -34,12 +35,12 @@ ggplot(larval.data.summary, aes(x = population, y = mean.survival, fill = treatm
   scale_y_continuous(limits = c(0, 52), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
-  labs(x = "Population", y = "Larval Survival (%)", color = "Populations") +
+  labs(x = "Population", y = "Mean Larval Survival (%)", color = "Populations") +
   theme_bw() +
   theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
         axis.title.y = element_text(color = "Black", size = 18, margin = margin(0, 10, 0, 0)),
-        axis.text.x = element_text(size = 13),
-        axis.text.y = element_text(size = 13),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
         legend.key.width = unit(1.25, 'cm'),

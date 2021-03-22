@@ -122,28 +122,72 @@ growth.boot.95perc <- growth.boot %>% group_by(group) %>%
             growth.ci.upper = quantile(growth.mm, probs = 0.975),
             growth.ci.lower = quantile(growth.mm, probs = 0.025)) %>% 
   mutate(population = factor(gsub("\\.", "", substr(group, 1, 8)), ordered = TRUE, levels = c("Superior", "Ontario")),
-         temperature = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 12)), ordered = TRUE, levels = c(2, 4.5, 7, 9), labels = c("2.0", "4.5", "7.0", "9.0")))
+         temperature = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 12)), ordered = TRUE, levels = c(2, 4.5, 7, 9), labels = c("2.0", "4.5", "7.0", "9.0")),
+         group = interaction(population, temperature)) %>% 
+  select(group, population, temperature, mean.growth, growth.se, growth.ci.upper, growth.ci.lower)
+
+
+#### FIND OVERLAPPING CIs AND ASSIGN CLD ---------------------------------------------------------
+
+growth.boot.95perc.ls <- growth.boot.95perc %>% filter(population == "Superior") %>% select(-population, -temperature)
+growth.boot.95perc.lo <- growth.boot.95perc %>% filter(population == "Ontario") %>% select(-population, -temperature)
+
+group.pairwise.ls <- data.frame(do.call(rbind, combn(as.character(growth.boot.95perc.ls$group), 2, simplify = FALSE))) %>% 
+  rename(group1 = X1, group2 = X2)
+group.pairwise.lo <- data.frame(do.call(rbind, combn(as.character(growth.boot.95perc.lo$group), 2, simplify = FALSE))) %>% 
+  rename(group1 = X1, group2 = X2)
+
+group.pairwise.ls.diff <- group.pairwise.ls %>% left_join(growth.boot.95perc.ls, by = c("group1" = "group")) %>%
+  left_join(growth.boot.95perc.ls, by = c("group2" = "group")) %>% 
+  mutate(m1_ul2 = mean.growth.x - growth.ci.upper.y,
+         m1_ll2 = mean.growth.x - growth.ci.lower.y,
+         m2_ul1 = mean.growth.y - growth.ci.upper.x,
+         m2_ll1 = mean.growth.y - growth.ci.lower.x) %>% 
+  select(group1, group2, m1_ul2, m1_ll2, m2_ul1, m2_ll1) %>% 
+  mutate(m1_cl2 = ifelse(m1_ul2 < 0 & m1_ll2 > 0 | m1_ul2 > 0 & m1_ll2 < 0, TRUE, FALSE),
+         m2_cl1 = ifelse(m2_ul1 < 0 & m2_ll1 > 0 | m2_ul1 > 0 & m2_ll1 < 0, TRUE, FALSE))
+## 2.0 = ab; 4.5 = b; 7.0 = a; 9.0 = c
+
+group.pairwise.lo.diff <- group.pairwise.lo %>% left_join(growth.boot.95perc.lo, by = c("group1" = "group")) %>%
+  left_join(growth.boot.95perc.lo, by = c("group2" = "group")) %>% 
+  mutate(m1_ul2 = mean.growth.x - growth.ci.upper.y,
+         m1_ll2 = mean.growth.x - growth.ci.lower.y,
+         m2_ul1 = mean.growth.y - growth.ci.upper.x,
+         m2_ll1 = mean.growth.y - growth.ci.lower.x) %>% 
+  select(group1, group2, m1_ul2, m1_ll2, m2_ul1, m2_ll1) %>% 
+  mutate(m1_cl2 = ifelse(m1_ul2 < 0 & m1_ll2 > 0 | m1_ul2 > 0 & m1_ll2 < 0, TRUE, FALSE),
+         m2_cl1 = ifelse(m2_ul1 < 0 & m2_ll1 > 0 | m2_ul1 > 0 & m2_ll1 < 0, TRUE, FALSE))
+## 2.0 = a; 4.5 = 1; 7.0 = a; 9.0 = b
+
+group.pairwise.cld <- data.frame(population = rep(c("Superior", "Ontario"), each = 4),
+                                 temperature = c("2.0", "4.5", "7.0", "9.0", "2.0", "4.5", "7.0", "9.0"),
+                                 cld = c("ab", "b", "a", "c", "A", "A", "A", "B"))
+
+growth.boot.95perc.cld <- left_join(growth.boot.95perc, group.pairwise.cld) %>% 
+  mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
+         temperature = factor(temperature, ordered = TRUE, levels = c("2.0", "4.5", "7.0", "9.0")))
 
 
 #### VISUALIZATIONS ------------------------------------------------------------------------------
 
-ggplot(growth.boot.95perc, aes(x = population, y = mean.growth, group = temperature, fill = temperature)) +
+ggplot(growth.boot.95perc.cld, aes(x = population, y = mean.growth, group = temperature, fill = temperature)) +
   geom_bar(stat = "identity", position = 'dodge', color = "black") +
-  geom_errorbar(aes(ymin = growth.ci.upper, ymax = growth.ci.lower), position = position_dodge(0.9),
+  geom_errorbar(aes(ymin = growth.ci.lower, ymax = growth.ci.upper), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
+  geom_text(aes(y = growth.ci.upper, label = cld), vjust = -0.5, position = position_dodge(0.9)) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
-  scale_y_continuous(limits = c(0, 0.105), breaks = seq(0, 0.1, 0.02), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 0.1075), breaks = seq(0, 0.1, 0.02), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
-  labs(y = expression("Absolute Growth Rate (mm day"^-1*")"), x = "Population") +
+  labs(y = expression("Mean Absolute Growth Rate (mm day"^-1*")"), x = "Population") +
   theme_bw() +
   theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
         axis.title.y = element_text(color = "Black", size = 18, margin = margin(0, 10, 0, 0)),
-        axis.text.x = element_text(size = 13),
-        axis.text.y = element_text(size = 13),
+        axis.text.x = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
         legend.title = element_blank(),
         legend.text = element_text(size = 15),
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
 
-ggsave("figures/Growth.tiff", width = 9, height = 6, dpi = 600)
+ggsave("figures/Growth_wCLD.tiff", width = 9, height = 6, dpi = 600)
 
