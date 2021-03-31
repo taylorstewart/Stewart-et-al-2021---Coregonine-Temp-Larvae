@@ -3,6 +3,11 @@
 rm(list = ls(all.names = TRUE))
 
 
+#### SET RANDOM SEED FOR REPRODUCIBILITY ---------------------------------------------------------
+
+set.seed(53896423)
+
+
 #### LOAD PACKAGES -------------------------------------------------------------------------------
 
 library(dplyr)
@@ -36,19 +41,15 @@ ATC <- bind_rows(ATC.2.0, ATC.4.5, ATC.7.0) %>%
          replicate.tank = ifelse(population == "Ontario", paste0("LO-", replicate.tank), paste0("LS-", replicate.tank)),
          replicate.rearing = substr(rearing.tank, (nchar(rearing.tank)+1)-1, nchar(rearing.tank)),
          replicate.rearing = ifelse(population == "Ontario", paste0("LO-", replicate.rearing), paste0("LS-", replicate.rearing)),
-         acclimation.temp = factor(acclimation.temp))
+         acclimation.temp = factor(acclimation.temp),
+         group = interaction(population, treatment))
 
 
-#### CALCULATE SAMPLE SIZE FOR EACH TREATMENT AND POPULATION -------------------------------------
+#### CALCULATE MEAN AND SAMPLE SIZE FOR EACH TREATMENT AND POPULATION  ---------------------------
 
-ATC.n <- ATC %>% group_by(population, treatment) %>% 
-  summarize(n = n())
-
-ATC.summary <- ATC %>% group_by(population, treatment) %>% 
-  summarize(response = mean(lethal.temp),
-            sd = sd(lethal.temp),
-            n = n(),
-            SE = sd/sqrt(n))
+LT50.summary <- ATC %>% group_by(population, treatment, group) %>% 
+  summarize(median.lethal.temp = median(lethal.temp), 
+            n = n())
 
 
 #### STATISTICAL ANALYSIS ------------------------------------------------------------------------
@@ -62,38 +63,82 @@ cisco.glm.full <- lmer(lethal.temp ~ length.mm + treatment + population + treatm
   ## Random effects removed - use linear model
 
 ## Box Cox transformation
-summary(cisco.lm.bcTrans <- powerTransform(lethal.temp ~ length.mm + treatment * population, data = ATC))
-cisco.glm.final <- lm(bcPower(lethal.temp, cisco.lm.bcTrans$roundlam) ~ length.mm + treatment * population, data = ATC)
+summary(cisco.lm.bcTrans <- powerTransform(lethal.temp ~ treatment * population, data = ATC))
+ATC <- ATC %>% mutate(lethal.trans = bcPower(lethal.temp, cisco.lm.bcTrans$roundlam))
+cisco.glm.final <- lm(lethal.trans ~ treatment * population, data = ATC)
 
 ## check residuals for normality
 qqPlot(cisco.glm.final)
 hist(rstudent(cisco.glm.final))
 
 ## check equal variance
-leveneTest(lethal.temp ~ population, data = ATC)
+leveneTest(lethal.trans ~ population, data = ATC)
 
-## ANOVA
-anova(cisco.glm.final)
 
-## Estimated margin means
-cisco.glm.full.emm <- emmeans(cisco.glm.final, ~ treatment | population, type = "response")
+#### CALCULATE BOOTSTRAPPED CIS EACH TREATMENT AND POPULATION ------------------------------------
 
-## Pairwise
-pairs(cisco.glm.full.emm, simple = list("treatment"), adjust = "fdr") 
+## Run loop (be patient!)
+bootstrap.mean <- do.call(rbind, lapply(unique(ATC$group), function(grp) {
+  ## Filter to only a single group (population x treatment)
+  data.group <- ATC %>% filter(group == grp)
+  
+  ## Create a bootstrapped data set from each temperature and group
+  bootstrap.data <- do.call(rbind, lapply(1:10000, function(length) {
+    lethal.temp.boot <- sample(data.group$lethal.temp, replace = T, size = nrow(data.group))
+    data.tl.boot <- data.frame(group = grp, rep = length, median.lethal.temp = median(lethal.temp.boot))
+  }))
+}))
+
+## Calculate 95% CI
+LT50.95perc <- bootstrap.mean %>% group_by(group) %>% 
+  summarize(LT50.95CI.upper = quantile(median.lethal.temp, probs = 0.975),
+            LT50.95CI.lower = quantile(median.lethal.temp, probs = 0.025)) %>% 
+  mutate(population = factor(gsub("\\.", "", substr(group, 1, 8)), ordered = TRUE, levels = c("Superior", "Ontario")),
+         treatment = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 11)), ordered = TRUE, 
+                              levels = c("2.0", "4.5", "7.0"), labels = c("2.0°C", "4.5°C", "7.0°C"))) %>% 
+  left_join(LT50.summary)
+
+
+#### FIND OVERLAPPING CIs AND ASSIGN CLD ---------------------------------------------------------
+
+group.pairwise <- data.frame(do.call(rbind, combn(as.character(LT50.95perc$group), 2, simplify = FALSE))) %>% 
+  rename(group1 = X1, group2 = X2)
+
+group.pairwise.diff <- group.pairwise %>% left_join(LT50.95perc, by = c("group1" = "group")) %>%
+  left_join(LT50.95perc, by = c("group2" = "group")) %>% 
+  mutate(m1_ul2 = median.lethal.temp.x - LT50.95CI.upper.y,
+         m1_ll2 = median.lethal.temp.x - LT50.95CI.lower.y,
+         m2_ul1 = median.lethal.temp.y - LT50.95CI.upper.x,
+         m2_ll1 = median.lethal.temp.y - LT50.95CI.lower.x) %>% 
+  select(group1, group2, m1_ul2, m1_ll2, m2_ul1, m2_ll1) %>% 
+  mutate(m1_cl2 = ifelse(m1_ul2 < 0 & m1_ll2 > 0 | m1_ul2 > 0 & m1_ll2 < 0, TRUE, FALSE),
+         m2_cl1 = ifelse(m2_ul1 < 0 & m2_ll1 > 0 | m2_ul1 > 0 & m2_ll1 < 0, TRUE, FALSE))
+## LS: 2.0 = a; 4.5 = b; 7.0 = bc
+## LO: 2.0 = b; 4.5 = b; 7.0 = c
+
+group.pairwise.cld <- data.frame(population = rep(c("Superior", "Ontario"), each = 3),
+                                 treatment = c("2.0°C", "4.5°C", "7.0°C", "2.0°C", "4.5°C", "7.0°C"),
+                                 cld = c("a", "b", "bc", "b", "b", "c"))
+
+LT50.95perc.cld <- left_join(LT50.95perc, group.pairwise.cld) %>% 
+  mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
+         treatment = factor(treatment, ordered = TRUE, levels = c("2.0°C", "4.5°C", "7.0°C")))
 
 
 #### VISUALIZATION -------------------------------------------------------------------------------
 
-ggplot(ATC.summary, aes(x = population, y = response, group = treatment, fill = treatment)) +
+ggplot(LT50.95perc.cld, aes(x = population, y = median.lethal.temp, group = treatment, fill = treatment)) +
   geom_bar(stat = "identity", position = 'dodge', color = "black") +
-  geom_errorbar(aes(ymin = response-SE, ymax = response+SE),
+  geom_text(aes(label = paste0("n=", n), y = 21.05), position = position_dodge(0.9), size = 4, color = "black", vjust = 'bottom') +
+  geom_errorbar(aes(ymin = LT50.95CI.lower, ymax = LT50.95CI.upper),
                 width = 0.3, size = 0.9, position = position_dodge(0.9)) +
-  geom_text(aes(label = paste0("n=", n), y = 23.05), position = position_dodge(0.9), size = 4, color = "black", vjust = 'bottom') +
-  scale_y_continuous(limits = c(0, 26.5), expand = c(0, 0)) +
+  geom_text(aes(y = LT50.95CI.upper, label = cld), vjust = -0.5, position = position_dodge(0.9)) +
+  scale_y_continuous(limits = c(0, 28), expand = c(0, 0)) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
   #scale_shape_manual(values = c(16, 15), labels = c("Superior    ", "Ontario")) +
-  coord_cartesian(ylim = c(23, 26.25)) +
-  labs(y = expression("Mean "~CT[max]*" (°C)"), x = 'Population') +
+  coord_cartesian(ylim = c(21, 27.5)) +
+  labs(y = "LT50", x = 'Population') +
+  #labs(y = expression("Mean "~CT[max]*" (°C)"), x = 'Population') +
   theme_bw() +
   theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
         axis.title.y = element_text(color = "Black", size = 18, margin = margin(0, 10, 0, 0)),
@@ -109,11 +154,12 @@ ggsave("figures/ATC-CT.tiff", width = 9, height = 6, dpi = 600)
 
 
 ggplot(data = ATC, aes(x = population, y = lethal.temp, fill = treatment, color = treatment)) +
-  geom_point(position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.3), alpha = 0.15, shape = 16, size = 2) +
-  geom_errorbar(data = ATC.summary, aes(x = population, y = response, ymin = response-SE, ymax = response+SE),
-                width = 0.25, size = 0.9, position = position_dodge(0.9)) +
-  geom_point(data = ATC.summary, aes(x = population, y = response), size = 3.5, position = position_dodge(width = 0.9), shape = 21, color = "black") +
-  geom_text(data = ATC.summary, aes(label = paste0("n=", n), y = 18.6), position = position_dodge(0.9), size = 3.5, color = "black", vjust = 'bottom') +
+  geom_point(position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.3), alpha = 0.2, shape = 16, size = 2) +
+  geom_errorbar(data = CT.95perc.cld, aes(x = population, y = mean.CT, ymin = CT.95CI.lower, ymax = CT.95CI.upper),
+                color = "gray20", width = 0.25, size = 0.9, position = position_dodge(0.9)) +
+  geom_point(data = CT.95perc.cld, aes(x = population, y = mean.CT), size = 3.5, position = position_dodge(width = 0.9), shape = 21, color = "black") +
+  geom_text(data = CT.95perc.cld, aes(y = CT.95CI.upper, label = cld), color = "gray20", vjust = -0.5, position = position_dodge(0.9)) +
+  geom_text(data = CT.95perc.cld, aes(label = paste0("n=", n), y = 18.6), position = position_dodge(0.9), size = 3.5, color = "black", vjust = 'bottom') +
   scale_y_continuous(limits = c(18.5, 29.2), breaks = seq(20, 28, 2), expand = c(0, 0)) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
   scale_color_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
