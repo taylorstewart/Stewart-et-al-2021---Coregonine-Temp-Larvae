@@ -20,7 +20,7 @@ library(parallel)
 #### CREATE DATAFRAME WITH ATC DATES -------------------------------------------------------------
 
 growth.dates <- data.frame(population = factor(rep(c("Superior", "Ontario"), each = 4), ordered = TRUE, levels = c("Superior", "Ontario")),
-                           treatment = factor(rep(c(2, 4.5, 7, 9), 2), ordered = TRUE, labels = c("2.0", "4.5", "7.0", "9.0")),
+                           treatment = factor(rep(c(2, 4.4, 6.9, 8.9), 2), ordered = TRUE, labels = c("2.0", "4.4", "6.9", "8.9")),
                            end.date = as.POSIXct(c("2020-07-09", "2020-05-27", "2020-04-15", "2020-03-22",
                                                    "2020-07-21", "2020-05-27", "2020-04-15", "2020-03-22"), format = "%Y-%m-%d"))
 
@@ -34,7 +34,7 @@ larval.lah.lo <- read_excel("data/Artedi-Temperature-HatchingMeasurements.xlsx",
 larval.lah <- bind_rows(larval.lah.ls, larval.lah.lo) %>% 
   filter(!is.na(length_mm), length_mm != 0, include.tl == "y") %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("superior", "ontario"), labels = c("Superior", "Ontario")),
-         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9), labels = c("2.0", "4.5", "7.0", "9.0")),
+         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9), labels = c("2.0", "4.4", "6.9", "8.9")),
          group = interaction(population, treatment)) %>% 
   select(group, population, treatment, rearing.tank, length.mm = length_mm)
 
@@ -44,24 +44,24 @@ rm(larval.lah.ls, larval.lah.lo)
 #### LOAD LARVAL 90 DAYS LENGTH DATA -------------------------------------------------------------
 
 larval.growth.2.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "2.0-Data")
-larval.growth.4.5 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
-larval.growth.7.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
-larval.growth.9.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "9.0-Data")
+larval.growth.4.4 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
+larval.growth.6.9 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
+larval.growth.8.9 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "9.0-Data")
 
 ## Combine data frames
-larval.growth <- bind_rows(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0, larval.growth.9.0) %>% 
+larval.growth <- bind_rows(larval.growth.2.0, larval.growth.4.4, larval.growth.6.9, larval.growth.8.9) %>% 
   filter(!is.na(length.mm), length.mm != 0) %>% 
-  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2, 4.5, 7, 9), labels = c("2.0", "4.5", "7.0", "9.0")),
+  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2, 4.5, 7, 9), labels = c("2.0", "4.4", "6.9", "8.9")),
          population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
          group = interaction(population, treatment))
 
-rm(larval.growth.2.0, larval.growth.4.5, larval.growth.7.0, larval.growth.9.0)
+rm(larval.growth.2.0, larval.growth.4.4, larval.growth.6.9, larval.growth.8.9)
 
 ## Find length of rearing
 embryo.hatch.dates <- read_excel("data/Artedi-Temperature-HatchDates.xlsx", sheet = "2020HatchingData") %>% 
   filter(is.na(notes) | notes != "empty well", !is.na(hatch_date)) %>% 
   mutate(population = factor(ifelse(population == "superior", "Superior", "Ontario"), ordered = TRUE, levels = c("Superior", "Ontario")),
-         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9), labels = c("2.0", "4.5", "7.0", "9.0"))) %>% 
+         treatment = factor(temperature, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9), labels = c("2.0", "4.4", "6.9", "8.9"))) %>% 
   dplyr::select(population, treatment, rearing.tank, hatch_date) %>% 
   group_by(population, treatment, rearing.tank) %>% 
   summarize(mean.hatch.date = strptime(mean(hatch_date), format = "%Y-%m-%d")) %>% 
@@ -131,11 +131,14 @@ growth.boot <- left_join(start.tl.boot, final.tl.boot) %>%
   mutate(tl.diff = final.length.mm - start.length.mm,
          growth.mm = tl.diff/as.numeric(growth.days))
 
-growth.boot.95perc <- growth.boot %>% group_by(group) %>% 
+growth.boot.95perc <- growth.boot %>% group_by(group, rearing.tank) %>% 
   summarize(growth.ci.upper = quantile(growth.mm, probs = 0.975),
-            growth.ci.lower = quantile(growth.mm, probs = 0.025)) %>% 
+            growth.ci.lower = quantile(growth.mm, probs = 0.025)) %>%
+  group_by(group) %>% 
+  summarize(growth.ci.upper = mean(growth.ci.upper),
+            growth.ci.lower = mean(growth.ci.lower)) %>% 
   mutate(population = factor(gsub("\\.", "", substr(group, 1, 8)), ordered = TRUE, levels = c("Superior", "Ontario")),
-         treatment = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 11)), ordered = TRUE, levels = c("2.0", "4.5", "7.0", "9.0"), labels = c("2.0", "4.5", "7.0", "9.0"))) %>% 
+         treatment = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 11)), ordered = TRUE, levels = c("2.0", "4.4", "6.9", "8.9"))) %>% 
   left_join(growth.obs) %>% 
   select(group, population, treatment, mean.growth, growth.ci.upper, growth.ci.lower)
 
@@ -158,12 +161,12 @@ group.pairwise.diff <- group.pairwise %>% left_join(growth.boot.95perc, by = c("
 ## LO: 2.0 = ac; 4.5 = c; 7.0 = c; 9.0 = d
 
 group.pairwise.cld <- data.frame(population = rep(c("Superior", "Ontario"), each = 4),
-                                 treatment = c("2.0", "4.5", "7.0", "9.0", "2.0", "4.5", "7.0", "9.0"),
+                                 treatment = c("2.0", "4.4", "6.9", "8.9", "2.0", "4.4", "6.9", "8.9"),
                                  cld = c("ab", "b", "c", "d", "ac", "c", "c", "d"))
 
 growth.boot.95perc.cld <- left_join(growth.boot.95perc, group.pairwise.cld) %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
-         treatment = factor(treatment, ordered = TRUE, levels = c("2.0", "4.5", "7.0", "9.0")))
+         treatment = factor(treatment, ordered = TRUE, levels = c("2.0", "4.4", "6.9", "8.9")))
 
 
 #### VISUALIZATIONS ------------------------------------------------------------------------------
@@ -173,8 +176,8 @@ ggplot(growth.boot.95perc.cld, aes(x = population, y = mean.growth, group = trea
   geom_errorbar(aes(ymin = growth.ci.lower, ymax = growth.ci.upper), position = position_dodge(0.9),
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   geom_text(aes(y = growth.ci.upper, label = cld), vjust = -0.5, position = position_dodge(0.9)) +
-  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
-  scale_y_continuous(limits = c(0, 0.1075), breaks = seq(0, 0.1, 0.02), expand = c(0, 0)) +
+  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C  ", "8.9°C")) +
+  scale_y_continuous(limits = c(0, 0.108), breaks = seq(0, 0.1, 0.02), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
   labs(y = expression("Mean Absolute Growth Rate (mm day"^-1*")"), x = "Population") +
   theme_bw() +
@@ -187,5 +190,5 @@ ggplot(growth.boot.95perc.cld, aes(x = population, y = mean.growth, group = trea
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
 
-ggsave("figures/Growth_wCLD.tiff", width = 9, height = 6, dpi = 600)
+ggsave("figures/Growth.tiff", width = 9, height = 6, dpi = 600)
 

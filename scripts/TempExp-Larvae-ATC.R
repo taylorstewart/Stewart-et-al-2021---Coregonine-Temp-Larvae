@@ -24,17 +24,16 @@ library(emmeans)
 #### LOAD DATA -----------------------------------------------------------------------------------
 
 ATC.2.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "2.0-Data")
-ATC.4.5 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
-ATC.7.0 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
+ATC.4.4 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "4.5-Data")
+ATC.6.9 <- read_excel("data/Artedi-Temperature-ATC.xlsx", sheet = "7.0-Data")
 
 
 #### COMBINE TEMPERATURE TREATMENTS --------------------------------------------------------------
 
-ATC <- bind_rows(ATC.2.0, ATC.4.5, ATC.7.0) %>% 
+ATC <- bind_rows(ATC.2.0, ATC.4.4, ATC.6.9) %>% 
   filter(include != "n") %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
-         treatment = paste0(formatC(treatment, digits = 1, format = "f"), "°C"),
-         treatment = factor(treatment, ordered = TRUE, levels = c("2.0°C", "4.5°C", "7.0°C")),
+         treatment = factor(treatment, ordered = TRUE, levels = c(2, 4.5, 7), labels = c("2.0", "4.4", "6.9")),
          replicate.tank = substr(tank.id, (nchar(tank.id)+1)-1, nchar(tank.id)),
          replicate.tank = ifelse(replicate.tank == 6, 1, replicate.tank),
          replicate.tank = ifelse(replicate.tank == 7, 2, replicate.tank),
@@ -59,20 +58,28 @@ bootstrap.mean <- do.call(rbind, lapply(unique(ATC$group), function(grp) {
   ## Filter to only a single group (population x treatment)
   data.group <- ATC %>% filter(group == grp)
   
-  ## Create a bootstrapped data set from each temperature and group
-  bootstrap.data <- do.call(rbind, lapply(1:10000, function(length) {
-    lethal.temp.boot <- sample(data.group$lethal.temp, replace = T, size = nrow(data.group))
-    data.tl.boot <- data.frame(group = grp, rep = length, mean.lethal.temp = mean(lethal.temp.boot))
+  do.call(rbind, lapply(unique(data.group$rearing.tank), function(tank) {
+    ## Filter to only a single temperature treatment
+    data.group.tank <- data.group %>% filter(rearing.tank == tank)
+    
+    ## Create a bootstrapped data set from each temperature and group
+      bootstrap.data <- do.call(rbind, lapply(1:10000, function(length) {
+        lethal.temp.boot <- sample(data.group.tank$lethal.temp, replace = T, size = nrow(data.group.tank))
+        data.tl.boot <- data.frame(group = grp, rearing.tank = tank, rep = length, mean.lethal.temp = mean(lethal.temp.boot))
+      }))
   }))
 }))
 
 ## Calculate 95% CI
-CT.95perc <- bootstrap.mean %>% group_by(group) %>% 
+CT.95perc <- bootstrap.mean %>% group_by(group, rearing.tank) %>% 
   summarize(CT.95CI.upper = quantile(mean.lethal.temp, probs = 0.975),
             CT.95CI.lower = quantile(mean.lethal.temp, probs = 0.025)) %>% 
+  group_by(group) %>% 
+  summarize(CT.95CI.upper = mean(CT.95CI.upper),
+            CT.95CI.lower = mean(CT.95CI.lower)) %>% 
   mutate(population = factor(gsub("\\.", "", substr(group, 1, 8)), ordered = TRUE, levels = c("Superior", "Ontario")),
          treatment = factor(ifelse(population == "Superior", substr(group, 10, 12), substr(group, 9, 11)), ordered = TRUE, 
-                              levels = c("2.0", "4.5", "7.0"), labels = c("2.0°C", "4.5°C", "7.0°C"))) %>% 
+                              levels = c("2.0", "4.4", "6.9"))) %>% 
   left_join(CT.summary)
 
 
@@ -91,15 +98,15 @@ group.pairwise.diff <- group.pairwise %>% left_join(CT.95perc, by = c("group1" =
   mutate(m1_cl2 = ifelse(m1_ul2 < 0 & m1_ll2 > 0 | m1_ul2 > 0 & m1_ll2 < 0, TRUE, FALSE),
          m2_cl1 = ifelse(m2_ul1 < 0 & m2_ll1 > 0 | m2_ul1 > 0 & m2_ll1 < 0, TRUE, FALSE))
 ## LS: 2.0 = a; 4.5 = b; 7.0 = bc
-## LO: 2.0 = b; 4.5 = b; 7.0 = c
+## LO: 2.0 = bc; 4.5 = bc; 7.0 = c
 
 group.pairwise.cld <- data.frame(population = rep(c("Superior", "Ontario"), each = 3),
-                                 treatment = c("2.0°C", "4.5°C", "7.0°C", "2.0°C", "4.5°C", "7.0°C"),
-                                 cld = c("a", "b", "bc", "b", "b", "c"))
+                                 treatment = c("2.0", "4.4", "6.9", "2.0", "4.4", "6.9"),
+                                 cld = c("a", "b", "bc", "bc", "bc", "c"))
 
 CT.95perc.cld <- left_join(CT.95perc, group.pairwise.cld) %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
-         treatment = factor(treatment, ordered = TRUE, levels = c("2.0°C", "4.5°C", "7.0°C")))
+         treatment = factor(treatment, ordered = TRUE, levels = c("2.0", "4.4", "6.9")))
 
 
 #### VISUALIZATION -------------------------------------------------------------------------------
@@ -111,7 +118,7 @@ ggplot(CT.95perc.cld, aes(x = population, y = mean.lethal.temp, group = treatmen
                 width = 0.3, size = 0.9, position = position_dodge(0.9)) +
   geom_text(aes(y = CT.95CI.upper, label = cld), vjust = -0.5, position = position_dodge(0.9)) +
   scale_y_continuous(limits = c(0, 26.5), expand = c(0, 0)) +
-  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
+  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C")) +
   coord_cartesian(ylim = c(22, 26.5)) +
   labs(y = "CTMax (°C)", x = 'Population') +
   theme_bw() +

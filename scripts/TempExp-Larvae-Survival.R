@@ -16,7 +16,7 @@ library(lme4)
 #### LOAD LARVAL DATA ----------------------------------------------------------------------------
 
 larval.data <- read_excel("data/Artedi-Temperature-Larval-Survival.xlsx", sheet = "LarvalSurvival") %>% 
-  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2.0, 4.5, 7.0, 9.0)),
+  mutate(treatment = factor(treatment, ordered = TRUE, levels = c(2.0, 4.4, 6.9, 8.9)),
          survival.logit = car::logit(larval.survival, percents = TRUE),
          population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")))
 
@@ -34,7 +34,7 @@ ggplot(larval.data.summary, aes(x = population, y = mean.survival, fill = treatm
                 size = 0.8, width = 0.2, linetype = "solid", show.legend = FALSE) +
   scale_y_continuous(limits = c(0, 52), expand = c(0, 0)) +
   scale_x_discrete(expand = c(0, 0.5)) +
-  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C  ", "9.0°C")) +
+  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C  ", "8.9°C")) +
   labs(x = "Population", y = "Mean Larval Survival (%)", color = "Populations") +
   theme_bw() +
   theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
