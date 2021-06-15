@@ -48,6 +48,7 @@ ATC <- bind_rows(ATC.2.0, ATC.4.4, ATC.6.9) %>%
 
 CT.summary <- ATC %>% group_by(population, treatment, group) %>% 
   summarize(mean.lethal.temp = mean(lethal.temp), 
+            min = min(lethal.temp),
             n = n())
 
 
@@ -97,12 +98,12 @@ group.pairwise.diff <- group.pairwise %>% left_join(CT.95perc, by = c("group1" =
   select(group1, group2, m1_ul2, m1_ll2, m2_ul1, m2_ll1) %>% 
   mutate(m1_cl2 = ifelse(m1_ul2 < 0 & m1_ll2 > 0 | m1_ul2 > 0 & m1_ll2 < 0, TRUE, FALSE),
          m2_cl1 = ifelse(m2_ul1 < 0 & m2_ll1 > 0 | m2_ul1 > 0 & m2_ll1 < 0, TRUE, FALSE))
-## LS: 2.0 = a; 4.5 = b; 7.0 = bc
-## LO: 2.0 = bc; 4.5 = bc; 7.0 = c
+## LS: 2.0 = a; 4.5 = b; 7.0 = b
+## LO: 2.0 = b; 4.5 = b; 7.0 = b
 
 group.pairwise.cld <- data.frame(population = rep(c("Superior", "Ontario"), each = 3),
                                  treatment = c("2.0", "4.4", "6.9", "2.0", "4.4", "6.9"),
-                                 cld = c("a", "b", "bc", "bc", "bc", "c"))
+                                 cld = c("a", "b", "b", "b", "b", "b"))
 
 CT.95perc.cld <- left_join(CT.95perc, group.pairwise.cld) %>% 
   mutate(population = factor(population, ordered = TRUE, levels = c("Superior", "Ontario")),
