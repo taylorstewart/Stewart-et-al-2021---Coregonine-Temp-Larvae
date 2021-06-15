@@ -112,13 +112,16 @@ CT.95perc.cld <- left_join(CT.95perc, group.pairwise.cld) %>%
 
 #### VISUALIZATION -------------------------------------------------------------------------------
 
-ggplot(CT.95perc.cld, aes(x = population, y = mean.lethal.temp, group = treatment, fill = treatment)) +
-  geom_bar(stat = "identity", position = 'dodge', color = "black") +
-  geom_text(aes(label = paste0("n=", n), y = 22.05), position = position_dodge(0.9), size = 4, color = "black", vjust = 'bottom') +
-  geom_errorbar(aes(ymin = CT.95CI.lower, ymax = CT.95CI.upper),
-                width = 0.3, size = 0.9, position = position_dodge(0.9)) +
-  geom_text(aes(y = CT.95CI.upper, label = cld), vjust = -0.5, position = position_dodge(0.9)) +
+ggplot(CT.95perc.cld, aes(x = population, y = mean.lethal.temp, group = treatment)) +
+  #geom_point(aes(fill = treatment), color = "black", size = 3, shape = 21, position = position_dodge(0.75)) + 
+  #geom_bar(stat = "identity", position = 'dodge', color = "black") +
+  geom_text(aes(label = paste0("(", n, ")"), y = 22.05), position = position_dodge(0.75), size = 4, color = "black", vjust = 'bottom') +
+  geom_errorbar(aes(ymin = CT.95CI.lower, ymax = CT.95CI.upper, color = treatment),
+                width = 0.3, size = 0.9, position = position_dodge(0.75)) +
+  geom_point(aes(fill = treatment), color = "black", size = 3, shape = 21, position = position_dodge(0.75)) + 
+  geom_text(aes(y = CT.95CI.upper, label = cld), vjust = -0.5, position = position_dodge(0.75)) +
   scale_y_continuous(limits = c(0, 26.5), expand = c(0, 0)) +
+  scale_color_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C")) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C")) +
   coord_cartesian(ylim = c(22, 26.5)) +
   labs(y = "CTMax (°C)", x = 'Population') +
@@ -132,30 +135,4 @@ ggplot(CT.95perc.cld, aes(x = population, y = mean.lethal.temp, group = treatmen
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
 
-ggsave("figures/ATC-CT.tiff", width = 9, height = 6, dpi = 600)
-
-
-
-ggplot(data = ATC, aes(x = population, y = lethal.temp, fill = treatment, color = treatment)) +
-  geom_point(position = position_jitterdodge(dodge.width = 0.9, jitter.width = 0.3), alpha = 0.2, shape = 16, size = 2) +
-  geom_errorbar(data = CT.95perc.cld, aes(x = population, y = mean.lethal.temp, ymin = CT.95CI.lower, ymax = CT.95CI.upper),
-                color = "gray20", width = 0.25, size = 0.9, position = position_dodge(0.9)) +
-  geom_point(data = CT.95perc.cld, aes(x = population, y = mean.lethal.temp), size = 3.5, position = position_dodge(width = 0.9), shape = 21, color = "black") +
-  geom_text(data = CT.95perc.cld, aes(y = CT.95CI.upper, label = cld), color = "gray20", vjust = -0.5, position = position_dodge(0.9)) +
-  geom_text(data = CT.95perc.cld, aes(label = paste0("n=", n), y = 18.6), position = position_dodge(0.9), size = 3.5, color = "black", vjust = 'bottom') +
-  scale_y_continuous(limits = c(18.5, 29.2), breaks = seq(20, 28, 2), expand = c(0, 0)) +
-  scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
-  scale_color_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.5°C  ", "7.0°C")) +
-  labs(y = "CTMax (°C)", x = 'Population') +
-  theme_bw() +
-  theme(axis.title.x = element_text(color = "Black", size = 18, margin = margin(10, 0, 0, 0)),
-        axis.title.y = element_text(color = "Black", size = 18, margin = margin(0, 10, 0, 0)),
-        axis.text.x = element_text(size = 15),
-        axis.text.y = element_text(size = 15),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 15),
-        legend.key.width = unit(1.25, 'cm'),
-        legend.position = "top")
-
-ggsave("figures/ATC-CT2.tiff", width = 9, height = 6, dpi = 600)
-
+ggsave("figures/ATC-CT-2.tiff", width = 6, height = 6, dpi = 600)
