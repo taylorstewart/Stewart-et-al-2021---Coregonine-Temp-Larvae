@@ -118,11 +118,12 @@ ggplot(CT.95perc.cld, aes(x = population, y = mean.lethal.temp, group = treatmen
   geom_text(aes(label = paste0("(", n, ")"), y = 22.05), position = position_dodge(0.75), size = 4, color = "black", vjust = 'bottom') +
   geom_errorbar(aes(ymin = CT.95CI.lower, ymax = CT.95CI.upper, color = treatment),
                 width = 0.3, size = 0.9, position = position_dodge(0.75)) +
-  geom_point(aes(fill = treatment), color = "black", size = 3, shape = 21, position = position_dodge(0.75)) + 
+  geom_point(aes(fill = treatment, shape = treatment), color = "black", size = 3, position = position_dodge(0.75)) + 
   geom_text(aes(y = CT.95CI.upper, label = cld), vjust = -0.5, position = position_dodge(0.75)) +
   scale_y_continuous(limits = c(0, 26.5), expand = c(0, 0)) +
   scale_color_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C")) +
   scale_fill_manual(values = c("#2c7bb6", "#abd9e9", "#fdae61"), labels = c("2.0°C  ", "4.4°C  ", "6.9°C")) +
+  scale_shape_manual(values = c(21, 22, 24), labels = c("2.0°C  ", "4.4°C  ", "6.9°C")) +
   coord_cartesian(ylim = c(22, 26.5)) +
   labs(y = "CTMax (°C)", x = 'Population') +
   theme_bw() +
@@ -135,4 +136,4 @@ ggplot(CT.95perc.cld, aes(x = population, y = mean.lethal.temp, group = treatmen
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
 
-ggsave("figures/ATC-CT-2.tiff", width = 6, height = 6, dpi = 600)
+ggsave("figures/Fig3.tiff", width = 6, height = 6, dpi = 600)

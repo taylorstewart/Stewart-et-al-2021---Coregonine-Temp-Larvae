@@ -46,4 +46,4 @@ ggplot(larval.data.summary, aes(x = population, y = mean.survival, fill = treatm
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
 
-ggsave("figures/Survival.tiff", width = 9, height = 6, dpi = 600)
+ggsave("figures/Fig1.tiff", width = 9, height = 6, dpi = 600)

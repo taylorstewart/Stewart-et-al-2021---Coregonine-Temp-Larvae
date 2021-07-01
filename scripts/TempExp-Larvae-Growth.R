@@ -190,5 +190,5 @@ ggplot(growth.boot.95perc.cld, aes(x = population, y = mean.growth, group = trea
         legend.key.width = unit(1.25, 'cm'),
         legend.position = "top")
 
-ggsave("figures/Growth.tiff", width = 9, height = 6, dpi = 600)
+ggsave("figures/Fig2.tiff", width = 9, height = 6, dpi = 600)
 
